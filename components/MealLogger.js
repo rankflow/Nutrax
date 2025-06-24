@@ -5,6 +5,7 @@ import * as FileSystem from 'expo-file-system';
 import * as ImagePicker from 'expo-image-picker';
 import React, { useState } from 'react';
 import { ActivityIndicator, Alert, Button, Image, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { Audio } from 'expo-av';
 
 const STORAGE_KEY = 'meals_data';
 
@@ -29,77 +30,23 @@ const saveMeals = async (meals) => {
 };
 
 const MealLogger = () => {
-  // Estados para texto
+  // Estados para texto e imagen
   const [textInput, setTextInput] = useState('');
-  const [textAIResponse, setTextAIResponse] = useState('');
-  const [textLoading, setTextLoading] = useState(false);
-
-  // Estados para imagen
+  const [aiResponse, setAIResponse] = useState('');
+  const [loading, setLoading] = useState(false);
   const [image, setImage] = useState(null);
-  const [imageAIResponse, setImageAIResponse] = useState('');
-  const [imageLoading, setImageLoading] = useState(false);
-
-  // Estado para logs
   const [logs, setLogs] = useState([]);
+  
+  // Estados para grabación de voz
+  const [recording, setRecording] = useState(null);
+  const [isRecording, setIsRecording] = useState(false);
+  const [permissionResponse, requestPermission] = Audio.usePermissions();
 
-  // Función para agregar logs
   const addLog = (message) => {
     setLogs(prev => [...prev, `${new Date().toLocaleTimeString()}: ${message}`]);
   };
 
-  // Función para enviar texto a GPT-4o
-  const handleTextSubmit = async () => {
-    if (!textInput.trim()) return;
-    setTextLoading(true);
-    setTextAIResponse('');
-    addLog('Iniciando envío de texto...');
-    
-    try {
-      addLog(`API Key: ${NUTRAX_API_KEY ? 'Presente' : 'Ausente'}`);
-      addLog(`Enviando texto: ${textInput}`);
-      
-      const response = await axios.post(
-        'https://api.openai.com/v1/chat/completions',
-        {
-          model: 'gpt-4o',
-          messages: [
-            { role: 'system', content: "Eres un nutricionista preciso y conciso. Analiza la comida descrita y devuelve: 1) Calorías estimadas 2) Gramos aproximados de proteína, grasa y carbohidratos 3) Recomendación rápida de salud o ajuste. Devuelve todo en menos de 100 palabras, sin repetir ideas." },
-            { role: 'user', content: textInput }
-          ]
-        },
-        {
-          headers: {
-            'Authorization': `Bearer ${NUTRAX_API_KEY}`,
-            'Content-Type': 'application/json'
-          }
-        }
-      );
-      
-      addLog(`Respuesta recibida: ${response.status}`);
-      const aiText = response.data.choices[0].message.content;
-      setTextAIResponse(aiText);
-      await saveMeal('texto', textInput, null, aiText);
-      addLog('Comida guardada exitosamente');
-    } catch (error) {
-      addLog(`Error: ${error.message}`);
-      addLog(`Status: ${error.response?.status}`);
-      addLog(`Data: ${JSON.stringify(error.response?.data)}`);
-      
-      let errorMessage = 'No se pudo obtener respuesta de la IA.';
-      if (error.response?.status === 401) {
-        errorMessage = 'Error de autenticación. Verifica tu API Key.';
-      } else if (error.response?.status === 429) {
-        errorMessage = 'Límite de uso excedido. Intenta más tarde.';
-      } else if (error.response?.data?.error?.message) {
-        errorMessage = error.response.data.error.message;
-      }
-      
-      Alert.alert('Error', errorMessage);
-    }
-    setTextLoading(false);
-  };
-
-  // Función para seleccionar imagen
+  // Seleccionar imagen
   const pickImage = async () => {
     let result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ImagePicker.MediaTypeOptions.Images,
@@ -108,34 +55,115 @@ const MealLogger = () => {
     });
     if (!result.canceled) {
       setImage(result.assets[0].uri);
-      setImageAIResponse('');
     }
   };
 
-  // Función para enviar imagen a GPT-4o
-  const handleImageSubmit = async () => {
-    if (!image) return;
-    setImageLoading(true);
-    setImageAIResponse('');
+  // --- Lógica de grabación de voz ---
+  
+  const startRecording = async () => {
     try {
-      // Leer imagen como base64
-      const base64 = await FileSystem.readAsStringAsync(image, { encoding: FileSystem.EncodingType.Base64 });
+      if (permissionResponse.status !== 'granted') {
+        await requestPermission();
+      }
+      await Audio.setAudioModeAsync({
+        allowsRecordingIOS: true,
+        playsInSilentModeIOS: true,
+      });
+      const { recording } = await Audio.Recording.createAsync(Audio.RecordingOptionsPresets.HIGH_QUALITY);
+      setRecording(recording);
+      setIsRecording(true);
+      addLog('Grabación iniciada...');
+    } catch (err) {
+      console.error('Failed to start recording', err);
+      Alert.alert('Error', 'No se pudo iniciar la grabación.');
+    }
+  };
+
+  const stopRecordingAndTranscribe = async () => {
+    setIsRecording(false);
+    await recording.stopAndUnloadAsync();
+    const uri = recording.getURI();
+    setRecording(null);
+    addLog(`Grabación detenida. Audio en: ${uri}`);
+    
+    // Transcribir el audio
+    setLoading(true);
+    addLog('Transcribiendo audio...');
+    try {
+      const formData = new FormData();
+      formData.append('file', {
+        uri,
+        name: 'audio.m4a',
+        type: 'audio/m4a',
+      });
+      formData.append('model', 'whisper-1');
+      
+      const response = await axios.post('https://api.openai.com/v1/audio/transcriptions', formData, {
+        headers: {
+          'Authorization': `Bearer ${NUTRAX_API_KEY}`,
+          'Content-Type': 'multipart/form-data',
+        },
+      });
+      const transcribedText = response.data.text;
+      setTextInput(prev => (prev ? `${prev} ${transcribedText}` : transcribedText).trim());
+      addLog('Transcripción completada.');
+    } catch (error) {
+      console.error('Error transcribing audio:', error.response?.data || error.message);
+      Alert.alert('Error', 'No se pudo transcribir el audio.');
+      addLog(`Error de transcripción: ${error.message}`);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleVoicePress = () => {
+    if (isRecording) {
+      stopRecordingAndTranscribe();
+    } else {
+      startRecording();
+    }
+  };
+
+  // --- Fin de lógica de voz ---
+
+  // Enviar a la IA (texto, imagen o ambos)
+  const handleSubmit = async () => {
+    if (!textInput.trim() && !image) {
+      Alert.alert('Error', 'Debes escribir una descripción, adjuntar una imagen o ambas cosas.');
+      return;
+    }
+    setLoading(true);
+    setAIResponse('');
+    addLog('Iniciando análisis...');
+    try {
+      let messages = [];
+      // Prompt para texto e imagen
+      if (textInput.trim() && image) {
+        messages = [
+          { role: 'system', content: 'Eres un nutricionista experto. Analiza la comida descrita y/o mostrada en la imagen y devuelve SOLO la siguiente información en formato claro y fácil de leer para móvil:\n\n1. Lista de ingredientes, cada uno en una línea, con este formato:\n   - Ingrediente: cantidad estimada (~calorías aproximadas)\n   Ejemplo: Queso: 50 g (~160 kcal)\n\n2. Un resumen final con los totales estimados:\n   - Calorías totales: ~kcal\n   - Proteínas: ~g\n   - Grasas: ~g\n   - Carbohidratos: ~g\n\nNo añadas explicaciones, recomendaciones ni texto adicional. No uses tablas ni Markdown, solo listas simples.' },
+          { role: 'user', content: textInput },
+          { role: 'user', content: [
+            { type: 'image_url', image_url: { url: `data:image/jpeg;base64,${await FileSystem.readAsStringAsync(image, { encoding: FileSystem.EncodingType.Base64 })}` } }
+          ]}
+        ];
+      } else if (image) {
+        messages = [
+          { role: 'system', content: 'Eres un nutricionista experto. Analiza la comida de la imagen y devuelve SOLO la siguiente información en formato claro y fácil de leer para móvil:\n\n1. Lista de ingredientes, cada uno en una línea, con este formato:\n   - Ingrediente: cantidad estimada (~calorías aproximadas)\n   Ejemplo: Queso: 50 g (~160 kcal)\n\n2. Un resumen final con los totales estimados:\n   - Calorías totales: ~kcal\n   - Proteínas: ~g\n   - Grasas: ~g\n   - Carbohidratos: ~g\n\nNo añadas explicaciones, recomendaciones ni texto adicional. No uses tablas ni Markdown, solo listas simples.' },
+          { role: 'user', content: [
+            { type: 'image_url', image_url: { url: `data:image/jpeg;base64,${await FileSystem.readAsStringAsync(image, { encoding: FileSystem.EncodingType.Base64 })}` } }
+          ]}
+        ];
+      } else {
+        messages = [
+          { role: 'system', content: 'Eres un nutricionista preciso y conciso. Analiza la comida descrita y devuelve: 1) Lista de ingredientes con cantidad (~kcal) 2) Calorías totales 3) Macronutrientes totales (proteínas, grasas, carbohidratos en gramos). Usa listas simples, sin explicaciones.' },
+          { role: 'user', content: textInput }
+        ];
+      }
       const response = await axios.post(
         'https://api.openai.com/v1/chat/completions',
         {
           model: 'gpt-4o',
-          messages: [
-            { role: 'system', content: 'Eres un asistente experto en nutrición. Analiza la comida de la imagen y da información nutricional y recomendaciones.' },
-            {
-              role: 'user',
-              content: [
-                {
-                  type: 'image_url',
-                  image_url: { url: `data:image/jpeg;base64,${base64}` }
-                }
-              ]
-            }
-          ]
+          messages,
         },
         {
           headers: {
@@ -145,12 +173,30 @@ const MealLogger = () => {
         }
       );
       const aiText = response.data.choices[0].message.content;
-      setImageAIResponse(aiText);
-      await saveMeal('imagen', null, image, aiText);
+      // Validar respuesta IA
+      if (!aiText || /no puedo ayudar|no puedo analizar|no puedo identificar|no puedo procesar|no puedo responder/i.test(aiText.trim())) {
+        Alert.alert('Error', 'La IA no pudo analizar la comida. Intenta describirla de manera más clara, revisa la calidad de la imagen o prueba con otra.');
+        setLoading(false);
+        return;
+      }
+      setAIResponse(aiText);
+      await saveMeal('mixto', textInput.trim() ? textInput : null, image, aiText);
+      addLog('Comida guardada exitosamente');
     } catch (error) {
-      Alert.alert('Error', 'No se pudo obtener respuesta de la IA.');
+      addLog(`Error: ${error.message}`);
+      addLog(`Status: ${error.response?.status}`);
+      addLog(`Data: ${JSON.stringify(error.response?.data)}`);
+      let errorMessage = 'No se pudo obtener respuesta de la IA.';
+      if (error.response?.status === 401) {
+        errorMessage = 'Error de autenticación. Verifica tu API Key.';
+      } else if (error.response?.status === 429) {
+        errorMessage = 'Límite de uso excedido. Intenta más tarde.';
+      } else if (error.response?.data?.error?.message) {
+        errorMessage = error.response.data.error.message;
+      }
+      Alert.alert('Error', errorMessage);
     }
-    setImageLoading(false);
+    setLoading(false);
   };
 
   // Guardar en AsyncStorage
@@ -176,10 +222,8 @@ const MealLogger = () => {
   return (
     <ScrollView contentContainerStyle={styles.container}>
       <Text style={styles.title}>Registrar comida</Text>
-      
-      {/* Sección texto */}
       <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Describir comida (texto)</Text>
+        <Text style={styles.sectionTitle}>Describe tu comida y/o adjunta una imagen</Text>
         <TextInput
           style={styles.input}
           placeholder="Describe tu comida..."
@@ -187,46 +231,31 @@ const MealLogger = () => {
           onChangeText={setTextInput}
           multiline
         />
-        <Button title="Enviar" onPress={handleTextSubmit} disabled={textLoading} />
-        {textLoading && <ActivityIndicator style={{ marginTop: 8 }} />}
-        {textAIResponse ? (
+        <View style={styles.buttonRow}>
+          <Button title={image ? 'Cambiar imagen' : 'Adjuntar imagen'} onPress={pickImage} />
+          <TouchableOpacity onPress={handleVoicePress} style={styles.micButton}>
+            <Text style={styles.micButtonText}>{isRecording ? '⏹️ Detener' : '🎤 Grabar'}</Text>
+          </TouchableOpacity>
+        </View>
+        {image && (
+          <View style={styles.imageContainer}>
+            <Image source={{ uri: image }} style={styles.image} />
+          </View>
+        )}
+        <Button title={loading ? 'Analizando...' : 'Enviar'} onPress={handleSubmit} disabled={loading || isRecording} />
+        {loading && <ActivityIndicator style={{ marginTop: 8 }} />}
+        {aiResponse ? (
           <View style={styles.responseBox}>
             <Text style={styles.responseTitle}>Respuesta IA:</Text>
             <TextInput
               style={styles.responseText}
-              value={textAIResponse}
+              value={aiResponse}
               editable={false}
               multiline
             />
           </View>
         ) : null}
       </View>
-
-      {/* Sección imagen */}
-      <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Analizar imagen de comida</Text>
-        <Button title="Seleccionar imagen" onPress={pickImage} />
-        {image && (
-          <View style={styles.imageContainer}>
-            <Image source={{ uri: image }} style={styles.image} />
-            <Button title="Analizar imagen" onPress={handleImageSubmit} disabled={imageLoading} />
-            {imageLoading && <ActivityIndicator style={{ marginTop: 8 }} />}
-            {imageAIResponse ? (
-              <View style={styles.responseBox}>
-                <Text style={styles.responseTitle}>Respuesta IA:</Text>
-                <TextInput
-                  style={styles.responseText}
-                  value={imageAIResponse}
-                  editable={false}
-                  multiline
-                />
-              </View>
-            ) : null}
-          </View>
-        )}
-      </View>
-
-      {/* Logs */}
       {logs.length > 0 && (
         <View style={styles.logsContainer}>
           <Text style={styles.logsTitle}>Logs de actividad:</Text>
@@ -336,6 +365,23 @@ const styles = StyleSheet.create({
     color: '#666',
     marginBottom: 2,
     fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
+  },
+  buttonRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  micButton: {
+    backgroundColor: '#f0f0f0',
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#ddd',
+  },
+  micButtonText: {
+    fontSize: 16,
   },
 });
 

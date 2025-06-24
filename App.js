@@ -1,12 +1,24 @@
-import React from 'react';
+import React, { useState, useEffect, useMemo, createContext } from 'react';
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
-import { StatusBar } from 'expo-status-bar';
-import { StyleSheet, Text, View, TouchableOpacity } from 'react-native';
+import { StatusBar, View, ActivityIndicator, StyleSheet, Text, TouchableOpacity } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import MealLogger from './components/MealLogger';
 import MealHistoryScreen from './screens/MealHistoryScreen';
+import UserProfile from './components/UserProfile';
+import UserProfileHistory from './components/UserProfileHistory';
+import CalendarScreen from './screens/CalendarScreen';
+import WelcomeScreen from './screens/onboarding/WelcomeScreen';
+import NameScreen from './screens/onboarding/NameScreen';
+import GenderScreen from './screens/onboarding/GenderScreen';
+import DobScreen from './screens/onboarding/DobScreen';
+import HeightScreen from './screens/onboarding/HeightScreen';
+import WeightScreen from './screens/onboarding/WeightScreen';
+import { AuthContext } from './context/AuthContext';
 
-const Stack = createNativeStackNavigator();
+const OnboardingStack = createNativeStackNavigator();
+const MainStack = createNativeStackNavigator();
+const RootStack = createNativeStackNavigator();
 
 // Pantalla de inicio
 function HomeScreen({ navigation }) {
@@ -51,43 +63,80 @@ function UserProfileScreen() {
   );
 }
 
+const OnboardingFlow = () => (
+  <OnboardingStack.Navigator>
+    <OnboardingStack.Screen name="Welcome" component={WelcomeScreen} options={{ headerShown: false }} />
+    <OnboardingStack.Screen name="Name" component={NameScreen} options={{ title: 'Nombre', headerBackTitle: 'Atrás' }} />
+    <OnboardingStack.Screen name="Gender" component={GenderScreen} options={{ title: 'Género', headerBackTitle: 'Atrás' }} />
+    <OnboardingStack.Screen name="Dob" component={DobScreen} options={{ title: 'Fecha de Nacimiento', headerBackTitle: 'Atrás' }} />
+    <OnboardingStack.Screen name="Height" component={HeightScreen} options={{ title: 'Altura', headerBackTitle: 'Atrás' }} />
+    <OnboardingStack.Screen name="Weight" component={WeightScreen} options={{ title: 'Peso', headerBackTitle: 'Atrás' }} />
+  </OnboardingStack.Navigator>
+);
+
+const MainAppFlow = () => (
+  <MainStack.Navigator 
+    initialRouteName="Home"
+    screenOptions={{
+      headerStyle: { backgroundColor: '#4CAF50' },
+      headerTintColor: '#fff',
+      headerTitleStyle: { fontWeight: 'bold' },
+    }}
+  >
+    <MainStack.Screen name="Home" component={HomeScreen} options={{ title: 'Nutrax' }}/>
+    <MainStack.Screen name="MealLogger" component={MealLogger} options={{ title: 'Registrar Comida' }} />
+    <MainStack.Screen name="MealHistory" component={MealHistoryScreen} options={{ title: 'Historial Semanal' }} />
+    <MainStack.Screen name="Calendar" component={CalendarScreen} options={{ title: 'Seleccionar Fecha' }} />
+    <MainStack.Screen name="UserProfile" component={UserProfile} options={{ title: 'Perfil de Usuario' }} />
+    <MainStack.Screen name="UserProfileHistory" component={UserProfileHistory} options={{ title: 'Histórico de Perfil' }} />
+  </MainStack.Navigator>
+);
+
 export default function App() {
+  const [isLoading, setIsLoading] = useState(true);
+  const [isNewUser, setIsNewUser] = useState(true);
+
+  useEffect(() => {
+    const checkUser = async () => {
+      try {
+        const userProfile = await AsyncStorage.getItem('userProfile');
+        setIsNewUser(userProfile === null);
+      } catch (e) {
+        // En caso de error, asumimos que es un nuevo usuario para evitar bloqueos
+        setIsNewUser(true);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    checkUser();
+  }, []);
+
+  const authContext = useMemo(() => ({
+    completeOnboarding: () => {
+      setIsNewUser(false);
+    },
+  }), []);
+
+  if (isLoading) {
+    return (
+      <View style={styles.loaderContainer}>
+        <ActivityIndicator size="large" color="#4CAF50" />
+      </View>
+    );
+  }
+
   return (
-    <NavigationContainer>
-      <Stack.Navigator 
-        initialRouteName="Home"
-        screenOptions={{
-          headerStyle: {
-            backgroundColor: '#4CAF50',
-          },
-          headerTintColor: '#fff',
-          headerTitleStyle: {
-            fontWeight: 'bold',
-          },
-        }}
-      >
-        <Stack.Screen 
-          name="Home" 
-          component={HomeScreen} 
-          options={{ title: 'Nutrax' }}
-        />
-        <Stack.Screen 
-          name="MealLogger" 
-          component={MealLogger} 
-          options={{ title: 'Registrar Comida' }}
-        />
-        <Stack.Screen 
-          name="MealHistory" 
-          component={MealHistoryScreen} 
-          options={{ title: 'Historial' }}
-        />
-        <Stack.Screen 
-          name="UserProfile" 
-          component={UserProfileScreen} 
-          options={{ title: 'Perfil' }}
-        />
-      </Stack.Navigator>
-    </NavigationContainer>
+    <AuthContext.Provider value={authContext}>
+      <NavigationContainer>
+        <RootStack.Navigator screenOptions={{ headerShown: false }}>
+          {isNewUser ? (
+            <RootStack.Screen name="Onboarding" component={OnboardingFlow} />
+          ) : (
+            <RootStack.Screen name="MainApp" component={MainAppFlow} />
+          )}
+        </RootStack.Navigator>
+      </NavigationContainer>
+    </AuthContext.Provider>
   );
 }
 
@@ -123,5 +172,10 @@ const styles = StyleSheet.create({
     color: 'white',
     fontSize: 18,
     fontWeight: 'bold',
+  },
+  loaderContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
 });
