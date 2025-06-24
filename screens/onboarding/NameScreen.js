@@ -14,6 +14,10 @@ const NameScreen = () => {
     navigation.navigate('Gender', { name });
   };
 
+  const handleBack = () => {
+    navigation.goBack();
+  };
+
   return (
     <View style={styles.container}>
       <Text style={styles.title}>¿Cómo te llamas?</Text>
@@ -24,9 +28,14 @@ const NameScreen = () => {
         onChangeText={setName}
         autoCapitalize="words"
       />
-      <TouchableOpacity style={styles.button} onPress={handleNext}>
-        <Text style={styles.buttonText}>→</Text>
-      </TouchableOpacity>
+      <View style={styles.buttonRow}>
+        <TouchableOpacity style={styles.button} onPress={handleBack}>
+          <Text style={styles.buttonText}>←</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={styles.button} onPress={handleNext}>
+          <Text style={styles.buttonText}>→</Text>
+        </TouchableOpacity>
+      </View>
     </View>
   );
 };
@@ -65,6 +74,13 @@ const styles = StyleSheet.create({
     color: 'white',
     fontSize: 24,
     fontWeight: 'bold',
+  },
+  buttonRow: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: 24,
+    marginTop: 8,
   },
 });
 

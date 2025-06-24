@@ -31,6 +31,10 @@ const WeightScreen = () => {
     }
   };
 
+  const handleBack = () => {
+    navigation.goBack();
+  };
+
   return (
     <View style={styles.container}>
       <Text style={styles.title}>¿Cuál es tu peso actual?</Text>
@@ -44,9 +48,14 @@ const WeightScreen = () => {
         />
         <Text style={styles.unit}>kg</Text>
       </View>
-      <TouchableOpacity style={styles.button} onPress={handleFinish}>
-        <Text style={styles.buttonText}>Finalizar</Text>
-      </TouchableOpacity>
+      <View style={styles.buttonRow}>
+        <TouchableOpacity style={styles.button} onPress={handleBack}>
+          <Text style={styles.buttonText}>←</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={styles.button} onPress={handleFinish}>
+          <Text style={styles.buttonText}>Finalizar</Text>
+        </TouchableOpacity>
+      </View>
     </View>
   );
 };
@@ -94,6 +103,13 @@ const styles = StyleSheet.create({
         color: 'white',
         fontSize: 20,
         fontWeight: 'bold',
+    },
+    buttonRow: {
+        flexDirection: 'row',
+        justifyContent: 'center',
+        alignItems: 'center',
+        gap: 24,
+        marginTop: 8,
     },
 });
 

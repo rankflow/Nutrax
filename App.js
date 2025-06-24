@@ -66,11 +66,11 @@ function UserProfileScreen() {
 const OnboardingFlow = () => (
   <OnboardingStack.Navigator>
     <OnboardingStack.Screen name="Welcome" component={WelcomeScreen} options={{ headerShown: false }} />
-    <OnboardingStack.Screen name="Name" component={NameScreen} options={{ title: 'Nombre', headerBackTitle: 'Atrás' }} />
-    <OnboardingStack.Screen name="Gender" component={GenderScreen} options={{ title: 'Género', headerBackTitle: 'Atrás' }} />
-    <OnboardingStack.Screen name="Dob" component={DobScreen} options={{ title: 'Fecha de Nacimiento', headerBackTitle: 'Atrás' }} />
-    <OnboardingStack.Screen name="Height" component={HeightScreen} options={{ title: 'Altura', headerBackTitle: 'Atrás' }} />
-    <OnboardingStack.Screen name="Weight" component={WeightScreen} options={{ title: 'Peso', headerBackTitle: 'Atrás' }} />
+    <OnboardingStack.Screen name="Name" component={NameScreen} options={{ title: 'Nombre', headerBackTitle: 'Atrás', headerBackVisible: false }} />
+    <OnboardingStack.Screen name="Gender" component={GenderScreen} options={{ title: 'Género', headerBackTitle: 'Atrás', headerBackVisible: false }} />
+    <OnboardingStack.Screen name="Dob" component={DobScreen} options={{ title: 'Fecha de Nacimiento', headerBackTitle: 'Atrás', headerBackVisible: false }} />
+    <OnboardingStack.Screen name="Height" component={HeightScreen} options={{ title: 'Altura', headerBackTitle: 'Atrás', headerBackVisible: false }} />
+    <OnboardingStack.Screen name="Weight" component={WeightScreen} options={{ title: 'Peso', headerBackTitle: 'Atrás', headerBackVisible: false }} />
   </OnboardingStack.Navigator>
 );
 

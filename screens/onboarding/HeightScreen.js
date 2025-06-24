@@ -16,6 +16,10 @@ const HeightScreen = () => {
     navigation.navigate('Weight', { ...route.params, height: heightNum });
   };
 
+  const handleBack = () => {
+    navigation.goBack();
+  };
+
   return (
     <View style={styles.container}>
       <Text style={styles.title}>¿Cuál es tu altura?</Text>
@@ -29,9 +33,14 @@ const HeightScreen = () => {
         />
         <Text style={styles.unit}>cm</Text>
       </View>
-      <TouchableOpacity style={styles.button} onPress={handleNext}>
-        <Text style={styles.buttonText}>→</Text>
-      </TouchableOpacity>
+      <View style={styles.buttonRow}>
+        <TouchableOpacity style={styles.button} onPress={handleBack}>
+          <Text style={styles.buttonText}>←</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={styles.button} onPress={handleNext}>
+          <Text style={styles.buttonText}>→</Text>
+        </TouchableOpacity>
+      </View>
     </View>
   );
 };
@@ -79,6 +88,13 @@ const styles = StyleSheet.create({
     color: 'white',
     fontSize: 24,
     fontWeight: 'bold',
+  },
+  buttonRow: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: 24,
+    marginTop: 8,
   },
 });
 
