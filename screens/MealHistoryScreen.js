@@ -43,12 +43,33 @@ const getDayName = (date) => {
 // Función para extraer calorías de un texto
 function extractCalories(text) {
   if (!text) return 0;
-  // Buscar la primera línea con 'calorías' o 'kcal'
-  const match = text.match(/([\d,.]+)\s*kcal/i);
-  if (match) {
-    return parseInt(match[1].replace(',', '.'));
+  const totalLine = text.split('\n').find(line => /calor[ií]as totales/i.test(line));
+  if (totalLine) {
+    const match = totalLine.match(/([\d,.]+)\s*kcal/i);
+    if (match) {
+      return parseInt(match[1].replace(',', '.'));
+    }
   }
   return 0;
+}
+
+// Extraer macros del texto de la IA
+function extractMacros(text) {
+  if (!text) return { proteinas: '', grasas: '', carbohidratos: '' };
+  const prot = text.match(/prote[ií]nas:\s*~?([\d,.]+)\s*g/i);
+  const grasas = text.match(/grasas:\s*~?([\d,.]+)\s*g/i);
+  const carb = text.match(/carbohidratos:\s*~?([\d,.]+)\s*g/i);
+  return {
+    proteinas: prot ? prot[1] : '',
+    grasas: grasas ? grasas[1] : '',
+    carbohidratos: carb ? carb[1] : ''
+  };
+}
+
+// Extraer nombre del texto de la IA
+function extractName(meal, idx) {
+  if (meal.name && meal.name.trim()) return meal.name;
+  return `Comida ${idx + 1}`;
 }
 
 const MealHistoryScreen = () => {
@@ -61,6 +82,7 @@ const MealHistoryScreen = () => {
   const [groupedMeals, setGroupedMeals] = useState([]);
   const [activeSections, setActiveSections] = useState([]); // Para el acordeón
   const [caloriesTotals, setCaloriesTotals] = useState({});
+  const [expandedMeals, setExpandedMeals] = useState({}); // { [mealId]: bool }
 
   // Cargar comidas
   const loadMeals = async () => {
@@ -126,7 +148,6 @@ const MealHistoryScreen = () => {
               const updatedMeals = meals.filter(meal => meal.id !== mealId);
               await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(updatedMeals));
               setMeals(updatedMeals);
-              Alert.alert('Éxito', 'Comida eliminada correctamente');
             } catch (error) {
               Alert.alert('Error', 'No se pudo eliminar la comida');
             }
@@ -136,30 +157,49 @@ const MealHistoryScreen = () => {
     );
   };
 
-  const toggleSection = (title) => {
-    setActiveSections(prev => 
-      prev.includes(title) ? prev.filter(t => t !== title) : [...prev, title]
+  const toggleSection = (dateKey) => {
+    setActiveSections(prev =>
+      prev.includes(dateKey) ? prev.filter(k => k !== dateKey) : [...prev, dateKey]
     );
   };
 
-  const renderMeal = ({ item }) => (
-    <Collapsible collapsed={!activeSections.includes(item.sectionTitle)} align="center">
+  // Renderizar cada comida como colapsable
+  const renderMeal = ({ item, index, section }) => {
+    const mealName = extractName(item, index);
+    const hora = new Date(item.date).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' });
+    const kcal = extractCalories(item.aiOutput);
+    const macros = extractMacros(item.aiOutput);
+    const expanded = expandedMeals[item.id];
+    return (
       <View style={styles.mealCard}>
-        <Text style={styles.mealTime}>{new Date(item.date).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })}</Text>
-        <Text style={styles.aiResponse}>{item.aiOutput}</Text>
-        <TouchableOpacity onPress={() => deleteMeal(item.id)} style={styles.deleteButton}>
-          <Text style={styles.deleteButtonText}>Eliminar</Text>
+        <TouchableOpacity onPress={() => setExpandedMeals(prev => ({ ...prev, [item.id]: !expanded }))}>
+          <View style={styles.mealHeaderRow}>
+            <Text style={styles.mealName}>{mealName}</Text>
+            <Text style={styles.mealTime}>{hora}</Text>
+          </View>
+          <View style={styles.mealSummaryRow}>
+            <Text style={styles.kcalTotal}>{kcal > 0 ? `${kcal} kcal` : ''}</Text>
+            <Text style={styles.macros}>{`P: ${macros.proteinas}g  G: ${macros.grasas}g  C: ${macros.carbohidratos}g`}</Text>
+          </View>
         </TouchableOpacity>
+        {expanded && (
+          <View style={styles.mealDetailBox}>
+            <Text style={styles.aiResponse}>{item.aiOutput}</Text>
+            <TouchableOpacity onPress={() => deleteMeal(item.id)} style={styles.deleteButton}>
+              <Text style={styles.deleteButtonText}>Eliminar</Text>
+            </TouchableOpacity>
+          </View>
+        )}
       </View>
-    </Collapsible>
-  );
+    );
+  };
 
   const renderSectionHeader = ({ section: { title, data, dateKey } }) => {
-    const isCollapsed = !activeSections.includes(title);
+    const isCollapsed = !activeSections.includes(dateKey);
     const isToday = title.includes(formatDateToDisplay(formatDateToISO(new Date())));
     const totalKcal = caloriesTotals[dateKey] || 0;
     return (
-      <TouchableOpacity onPress={() => toggleSection(title)}>
+      <TouchableOpacity onPress={() => toggleSection(dateKey)}>
         <View style={[styles.sectionHeader, isToday && styles.todayHeader]}>
           <Text style={styles.sectionTitle}>{title}</Text>
           <Text style={styles.kcalTotal}>{totalKcal > 0 ? `${totalKcal} kcal` : ''}</Text>
@@ -172,7 +212,7 @@ const MealHistoryScreen = () => {
   // Modificar la estructura de datos para que cada comida tenga el título de su sección
   const sectionsWithItemTitles = groupedMeals.map(section => ({
     ...section,
-    data: section.data.map(item => ({...item, sectionTitle: section.title }))
+    data: activeSections.includes(section.dateKey) ? section.data.map(item => ({...item, sectionTitle: section.title })) : []
   }));
 
   return (
@@ -205,6 +245,9 @@ const styles = StyleSheet.create({
   sectionTitle: { fontSize: 18, fontWeight: 'bold', color: '#4CAF50' },
   noMealsText: { color: '#888', fontStyle: 'italic', marginTop: 4 },
   mealCard: { backgroundColor: 'white', padding: 12, marginVertical: 6, borderRadius: 8, borderWidth: 1, borderColor: '#eee' },
+  mealHeaderRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 2 },
+  mealName: { fontWeight: 'bold', fontSize: 16, color: '#4CAF50' },
+  mealSummaryRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 2 },
   mealTime: { fontWeight: 'bold', marginBottom: 6 },
   aiResponse: { color: '#333' },
   deleteButton: { alignSelf: 'flex-end', marginTop: 8 },
@@ -225,6 +268,8 @@ const styles = StyleSheet.create({
     marginLeft: 8,
     fontSize: 16,
   },
+  macros: { fontSize: 13, color: '#888', marginLeft: 8 },
+  mealDetailBox: { marginTop: 8 },
 });
 
 export default MealHistoryScreen;

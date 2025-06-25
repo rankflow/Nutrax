@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, FlatList, TouchableOpacity, Alert, Button } from 'react-native';
+import { View, Text, StyleSheet, FlatList, TouchableOpacity, Alert, Button, ScrollView } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useNavigation } from '@react-navigation/native';
 
@@ -60,7 +60,7 @@ const UserProfileHistory = () => {
   );
 
   return (
-    <View style={styles.container}>
+    <ScrollView contentContainerStyle={styles.container}>
       <View style={styles.header}>
         <Text style={styles.title}>Histórico de Perfil</Text>
         <Button title="Volver" onPress={() => navigation.goBack()} />
@@ -75,7 +75,7 @@ const UserProfileHistory = () => {
           contentContainerStyle={{ paddingBottom: 40 }}
         />
       )}
-    </View>
+    </ScrollView>
   );
 };
 

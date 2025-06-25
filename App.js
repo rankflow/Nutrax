@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo, createContext } from 'react';
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
-import { StatusBar, View, ActivityIndicator, StyleSheet, Text, TouchableOpacity } from 'react-native';
+import { StatusBar, View, ActivityIndicator, StyleSheet, Text, TouchableOpacity, Platform } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import MealLogger from './components/MealLogger';
 import MealHistoryScreen from './screens/MealHistoryScreen';
@@ -15,6 +15,7 @@ import DobScreen from './screens/onboarding/DobScreen';
 import HeightScreen from './screens/onboarding/HeightScreen';
 import WeightScreen from './screens/onboarding/WeightScreen';
 import { AuthContext } from './context/AuthContext';
+import DeficitHeader from './components/DeficitHeader';
 
 const OnboardingStack = createNativeStackNavigator();
 const MainStack = createNativeStackNavigator();
@@ -74,10 +75,32 @@ const OnboardingFlow = () => (
   </OnboardingStack.Navigator>
 );
 
+// Header personalizado que incluye el header nativo y el DeficitHeader debajo
+function CustomHeader({ navigation, route, options, back }) {
+  return (
+    <View>
+      {/* Header nativo de React Navigation */}
+      {options.headerShown !== false && (
+        <View style={{ backgroundColor: options.headerStyle?.backgroundColor || '#4CAF50', paddingTop: Platform.OS === 'ios' ? 60 : 32, paddingBottom: 16 }}>
+          {back ? (
+            <TouchableOpacity onPress={navigation.goBack} style={{ position: 'absolute', left: 16, top: Platform.OS === 'ios' ? 60 : 32, zIndex: 10 }}>
+              <Text style={{ color: '#fff', fontSize: 18 }}>{'<'} Atrás</Text>
+            </TouchableOpacity>
+          ) : null}
+          <Text style={{ color: '#fff', fontWeight: 'bold', fontSize: 22, textAlign: 'center' }}>{options.title}</Text>
+        </View>
+      )}
+      {/* Barra de déficit */}
+      <DeficitHeader />
+    </View>
+  );
+}
+
 const MainAppFlow = () => (
   <MainStack.Navigator 
     initialRouteName="Home"
     screenOptions={{
+      header: (props) => <CustomHeader {...props} />, // Usar header personalizado
       headerStyle: { backgroundColor: '#4CAF50' },
       headerTintColor: '#fff',
       headerTitleStyle: { fontWeight: 'bold' },

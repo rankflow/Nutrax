@@ -93,6 +93,8 @@ const UserProfile = () => {
   
   const [loading, setLoading] = useState(false);
   const [tdeeResult, setTdeeResult] = useState(null);
+  const [originalProfile, setOriginalProfile] = useState(null);
+  const [originalActivity, setOriginalActivity] = useState('');
 
   useEffect(() => {
     const loadProfile = async () => {
@@ -102,6 +104,13 @@ const UserProfile = () => {
         setProfile(parsedProfile);
         setHeight(parsedProfile.height.toString());
         setWeight(parsedProfile.weight.toString());
+        // Guardar valores originales
+        setOriginalProfile({
+          height: parsedProfile.height.toString(),
+          weight: parsedProfile.weight.toString(),
+          gender: parsedProfile.gender,
+          dob: parsedProfile.dob
+        });
         // Cargar última actividad si existe en el histórico
         const historyRaw = await AsyncStorage.getItem('userProfileHistory');
         if (historyRaw) {
@@ -109,6 +118,7 @@ const UserProfile = () => {
           if (history.length > 0) {
             const lastEntry = history[history.length - 1];
             setActivityText(lastEntry.actividad_texto || '');
+            setOriginalActivity(lastEntry.actividad_texto || '');
             setTdeeResult({
               mb: lastEntry.metabolismo_basal,
               activity: lastEntry.actividad_kcal_estimadas,
@@ -159,6 +169,14 @@ const UserProfile = () => {
       const updatedProfile = { ...profile, height: heightNum, weight: weightNum };
       await AsyncStorage.setItem('userProfile', JSON.stringify(updatedProfile));
       setProfile(updatedProfile);
+      // Actualizar valores originales tras guardar
+      setOriginalProfile({
+        height: heightNum.toString(),
+        weight: weightNum.toString(),
+        gender: profile.gender,
+        dob: profile.dob
+      });
+      setOriginalActivity(activityText);
 
       // Guardar en histórico (solo uno por día)
       const fecha = getTodayISO();
@@ -189,13 +207,24 @@ const UserProfile = () => {
     }
   };
 
+  // Comprobar si hay cambios
+  const hasChanges = () => {
+    if (!originalProfile) return false;
+    return (
+      height !== originalProfile.height ||
+      weight !== originalProfile.weight ||
+      activityText !== originalActivity
+    );
+  };
+
   if (!profile) {
     return <View><Text>Cargando perfil...</Text></View>;
   }
 
   return (
     <ScrollView contentContainerStyle={styles.container}>
-      <Text style={styles.title}>{profile.name}</Text>
+      {/* <DeficitHeader /> */}
+      {/* <Text style={styles.title}>{profile.name}</Text> */}
       
       <View style={styles.staticInfoBox}>
         <Text style={styles.staticInfo}>Género: {profile.gender}</Text>
@@ -211,7 +240,7 @@ const UserProfile = () => {
       <Text style={styles.label}>Actividad física habitual</Text>
       <TextInput style={styles.input} value={activityText} onChangeText={setActivityText} multiline />
 
-      <Button title={loading ? 'Actualizando...' : 'Actualizar y Calcular TDEE'} onPress={handleUpdateProfile} disabled={loading} />
+      <Button title={loading ? 'Actualizando...' : 'Actualizar y Calcular TDEE'} onPress={handleUpdateProfile} disabled={loading || !hasChanges()} />
       
       <View style={{ marginVertical: 16 }}>
         <TouchableOpacity style={styles.historyButton} onPress={() => navigation.navigate('UserProfileHistory')}>

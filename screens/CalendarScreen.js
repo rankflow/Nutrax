@@ -2,6 +2,7 @@ import React from 'react';
 import { View, StyleSheet, Button } from 'react-native';
 import { Calendar } from 'react-native-calendars';
 import { useNavigation } from '@react-navigation/native';
+import DeficitHeader from '../components/DeficitHeader';
 
 const CalendarScreen = () => {
   const navigation = useNavigation();
@@ -12,6 +13,7 @@ const CalendarScreen = () => {
 
   return (
     <View style={styles.container}>
+      <DeficitHeader />
       <Calendar
         onDayPress={onDayPress}
         markedDates={{

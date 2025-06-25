@@ -6,6 +6,8 @@ import * as ImagePicker from 'expo-image-picker';
 import React, { useState } from 'react';
 import { ActivityIndicator, Alert, Button, Image, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { Audio } from 'expo-av';
+import { useNavigation } from '@react-navigation/native';
+import Modal from 'react-native-modal';
 
 const STORAGE_KEY = 'meals_data';
 
@@ -42,12 +44,18 @@ const MealLogger = () => {
   const [isRecording, setIsRecording] = useState(false);
   const [permissionResponse, requestPermission] = Audio.usePermissions();
 
+  const navigation = useNavigation();
+  const [modalVisible, setModalVisible] = useState(false);
+  const [pendingMeal, setPendingMeal] = useState(null);
+  const [imageLoading, setImageLoading] = useState(false);
+
   const addLog = (message) => {
     setLogs(prev => [...prev, `${new Date().toLocaleTimeString()}: ${message}`]);
   };
 
   // Seleccionar imagen
   const pickImage = async () => {
+    setImageLoading(true);
     let result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ImagePicker.MediaTypeOptions.Images,
       allowsEditing: true,
@@ -56,6 +64,7 @@ const MealLogger = () => {
     if (!result.canceled) {
       setImage(result.assets[0].uri);
     }
+    setImageLoading(false);
   };
 
   // --- Lógica de grabación de voz ---
@@ -140,7 +149,7 @@ const MealLogger = () => {
       // Prompt para texto e imagen
       if (textInput.trim() && image) {
         messages = [
-          { role: 'system', content: 'Eres un nutricionista experto. Analiza la comida descrita y/o mostrada en la imagen y devuelve SOLO la siguiente información en formato claro y fácil de leer para móvil:\n\n1. Lista de ingredientes, cada uno en una línea, con este formato:\n   - Ingrediente: cantidad estimada (~calorías aproximadas)\n   Ejemplo: Queso: 50 g (~160 kcal)\n\n2. Un resumen final con los totales estimados:\n   - Calorías totales: ~kcal\n   - Proteínas: ~g\n   - Grasas: ~g\n   - Carbohidratos: ~g\n\nNo añadas explicaciones, recomendaciones ni texto adicional. No uses tablas ni Markdown, solo listas simples.' },
+          { role: 'system', content: 'Eres un nutricionista experto. Analiza la comida descrita y/o mostrada en la imagen y devuelve SOLO la siguiente información en formato claro y fácil de leer para móvil:\n\n1. Una línea al principio con el tipo de comida del día, usando este formato: Nombre: desayuno, comida, merienda, cena, preentreno, postentreno, etc. Si el usuario no lo especifica, pon Nombre: Comida N (donde N es el número de comida del día, empezando por 1).\n2. Lista de ingredientes, cada uno en una línea, con este formato:\n   - Ingrediente: cantidad estimada (~calorías aproximadas)\n   Ejemplo: Queso: 50 g (~160 kcal)\n\n3. Un resumen final con los totales estimados:\n   - Calorías totales: ~kcal\n   - Proteínas: ~g\n   - Grasas: ~g\n   - Carbohidratos: ~g\n\nNo añadas explicaciones, recomendaciones ni texto adicional. No uses tablas ni Markdown, solo listas simples.' },
           { role: 'user', content: textInput },
           { role: 'user', content: [
             { type: 'image_url', image_url: { url: `data:image/jpeg;base64,${await FileSystem.readAsStringAsync(image, { encoding: FileSystem.EncodingType.Base64 })}` } }
@@ -148,14 +157,14 @@ const MealLogger = () => {
         ];
       } else if (image) {
         messages = [
-          { role: 'system', content: 'Eres un nutricionista experto. Analiza la comida de la imagen y devuelve SOLO la siguiente información en formato claro y fácil de leer para móvil:\n\n1. Lista de ingredientes, cada uno en una línea, con este formato:\n   - Ingrediente: cantidad estimada (~calorías aproximadas)\n   Ejemplo: Queso: 50 g (~160 kcal)\n\n2. Un resumen final con los totales estimados:\n   - Calorías totales: ~kcal\n   - Proteínas: ~g\n   - Grasas: ~g\n   - Carbohidratos: ~g\n\nNo añadas explicaciones, recomendaciones ni texto adicional. No uses tablas ni Markdown, solo listas simples.' },
+          { role: 'system', content: 'Eres un nutricionista experto. Analiza la comida de la imagen y devuelve SOLO la siguiente información en formato claro y fácil de leer para móvil:\n\n1. Una línea al principio con el tipo de comida del día, usando este formato: Nombre: desayuno, comida, merienda, cena, preentreno, postentreno, etc. Si el usuario no lo especifica, pon Nombre: Comida N (donde N es el número de comida del día, empezando por 1).\n2. Lista de ingredientes, cada uno en una línea, con este formato:\n   - Ingrediente: cantidad estimada (~calorías aproximadas)\n   Ejemplo: Queso: 50 g (~160 kcal)\n\n3. Un resumen final con los totales estimados:\n   - Calorías totales: ~kcal\n   - Proteínas: ~g\n   - Grasas: ~g\n   - Carbohidratos: ~g\n\nNo añadas explicaciones, recomendaciones ni texto adicional. No uses tablas ni Markdown, solo listas simples.' },
           { role: 'user', content: [
             { type: 'image_url', image_url: { url: `data:image/jpeg;base64,${await FileSystem.readAsStringAsync(image, { encoding: FileSystem.EncodingType.Base64 })}` } }
           ]}
         ];
       } else {
         messages = [
-          { role: 'system', content: 'Eres un nutricionista preciso y conciso. Analiza la comida descrita y devuelve: 1) Lista de ingredientes con cantidad (~kcal) 2) Calorías totales 3) Macronutrientes totales (proteínas, grasas, carbohidratos en gramos). Usa listas simples, sin explicaciones.' },
+          { role: 'system', content: 'Eres un nutricionista preciso y conciso. Analiza la comida descrita y devuelve:\n1. Una línea al principio con el tipo de comida del día, usando este formato: Nombre: desayuno, comida, merienda, cena, preentreno, postentreno, etc. Si el usuario no lo especifica, pon Nombre: Comida N (donde N es el número de comida del día, empezando por 1).\n2) Lista de ingredientes con cantidad (~kcal)\n3) Calorías totales\n4) Macronutrientes totales (proteínas, grasas, carbohidratos en gramos). Usa listas simples, sin explicaciones.' },
           { role: 'user', content: textInput }
         ];
       }
@@ -180,8 +189,14 @@ const MealLogger = () => {
         return;
       }
       setAIResponse(aiText);
-      await saveMeal('mixto', textInput.trim() ? textInput : null, image, aiText);
-      addLog('Comida guardada exitosamente');
+      setPendingMeal({
+        type: 'mixto',
+        input: textInput.trim() ? textInput : null,
+        imageUri: image,
+        aiOutput: aiText
+      });
+      setModalVisible(true);
+      addLog('Vista previa lista para confirmar');
     } catch (error) {
       addLog(`Error: ${error.message}`);
       addLog(`Status: ${error.response?.status}`);
@@ -199,21 +214,45 @@ const MealLogger = () => {
     setLoading(false);
   };
 
+  // Confirmar y guardar comida
+  const handleConfirm = async () => {
+    if (!pendingMeal) return;
+    await saveMeal(pendingMeal.type, pendingMeal.input, pendingMeal.imageUri, pendingMeal.aiOutput);
+    setModalVisible(false);
+    setPendingMeal(null);
+    setTextInput('');
+    setImage(null);
+    setAIResponse('');
+    navigation.navigate('Home');
+  };
+
+  // Cancelar modal
+  const handleCancel = () => {
+    setModalVisible(false);
+    setPendingMeal(null);
+  };
+
   // Guardar en AsyncStorage
   const saveMeal = async (type, input, imageUri, aiOutput) => {
     try {
       const existingMeals = await loadMeals();
+      // Extraer el nombre de la comida de la respuesta de la IA
+      let name = '';
+      const nameMatch = aiOutput.match(/^Nombre:\s*(.+)$/m);
+      if (nameMatch) {
+        name = nameMatch[1].trim();
+      }
       const newMeal = {
         id: Date.now().toString(),
         date: new Date().toISOString(),
         type,
         input,
         imageUri,
-        aiOutput
+        aiOutput,
+        name
       };
       const updatedMeals = [...existingMeals, newMeal];
       await saveMeals(updatedMeals);
-      Alert.alert('Éxito', 'Comida guardada correctamente');
     } catch (error) {
       Alert.alert('Error', 'No se pudo guardar la comida');
     }
@@ -242,19 +281,30 @@ const MealLogger = () => {
             <Image source={{ uri: image }} style={styles.image} />
           </View>
         )}
-        <Button title={loading ? 'Analizando...' : 'Enviar'} onPress={handleSubmit} disabled={loading || isRecording} />
+        <Button
+          title={loading ? 'Analizando...' : 'Enviar'}
+          onPress={handleSubmit}
+          disabled={
+            loading || isRecording || imageLoading || (!textInput.trim() && !image)
+          }
+          color={(!textInput.trim() && !image) || imageLoading ? '#ccc' : '#4CAF50'}
+        />
         {loading && <ActivityIndicator style={{ marginTop: 8 }} />}
-        {aiResponse ? (
-          <View style={styles.responseBox}>
-            <Text style={styles.responseTitle}>Respuesta IA:</Text>
-            <TextInput
-              style={styles.responseText}
-              value={aiResponse}
-              editable={false}
-              multiline
-            />
+        {/* Modal de confirmación */}
+        <Modal isVisible={modalVisible} onBackdropPress={handleCancel}>
+          <View style={{ backgroundColor: 'white', borderRadius: 12, padding: 20 }}>
+            <Text style={{ fontWeight: 'bold', fontSize: 18, marginBottom: 10 }}>Confirma tu comida</Text>
+            {pendingMeal && (
+              <ScrollView style={{ maxHeight: 300 }}>
+                <Text style={{ color: '#333', marginBottom: 10 }}>{pendingMeal.aiOutput}</Text>
+              </ScrollView>
+            )}
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: 20 }}>
+              <Button title="Cancelar" onPress={handleCancel} color="#888" />
+              <Button title="Confirmar" onPress={handleConfirm} color="#4CAF50" />
+            </View>
           </View>
-        ) : null}
+        </Modal>
       </View>
       {logs.length > 0 && (
         <View style={styles.logsContainer}>
